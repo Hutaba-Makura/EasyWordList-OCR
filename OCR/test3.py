@@ -11,7 +11,17 @@ def correct_warp(image_path):
         return None
     
     img_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    
+    h_min, h_max = 42 , 97
+    s_min, s_max = 1 , 30
+    for y in range(img_hsv.shape[0]):
+        for x in range(img_hsv.shape[1]):
+            if not (img_hsv[y, x, 0] >= h_min and
+                img_hsv[y, x, 0] <= h_max and
+                img_hsv[y, x, 1] >= s_min and
+                img_hsv[y, x, 1] <= s_max):
+                img_hsv[y, x] = [0, 0, 0] # 黒にする
+    # 画像を表示
+    cv2.imshow("image", img_hsv)
     """
     # コントラストを調整
     #enhanced = cv2.equalizeHist(inverted)
