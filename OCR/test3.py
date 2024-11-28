@@ -1,9 +1,12 @@
 import cv2
 import numpy as np
-import test2 as T2
+#import test2 as T2
 from PIL import Image
 
+# Description: 画像中の本のページを補正するプログラム
+
 def correct_warp(image_path):
+    print("画像を読み込んでいます...")
     # 画像を読み込み
     image = cv2.imread(image_path)
     if image is None:
@@ -11,8 +14,8 @@ def correct_warp(image_path):
         return None
     
     img_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    h_min, h_max = 42 , 97
-    s_min, s_max = 1 , 30
+    h_min, h_max = 0 , 115
+    s_min, s_max = 2 , 41
     for y in range(img_hsv.shape[0]):
         for x in range(img_hsv.shape[1]):
             if not (img_hsv[y, x, 0] >= h_min and
@@ -20,18 +23,36 @@ def correct_warp(image_path):
                 img_hsv[y, x, 1] >= s_min and
                 img_hsv[y, x, 1] <= s_max):
                 img_hsv[y, x] = [0, 0, 0] # 黒にする
-    # 画像を表示
-    cv2.imshow("image", img_hsv)
-    """
+    
+    kernel = np.ones((5, 5), np.uint8) # カーネルの定義 5x5の正方行列
+    img_close = cv2.morphologyEx(img_hsv, cv2.MORPH_CLOSE, kernel) # クロージング処理
+    img_open = cv2.morphologyEx(img_close, cv2.MORPH_OPEN, kernel) # オープニング処理
+
+    # HSVからBGRに変換して表示
+    img_bgr = cv2.cvtColor(img_open, cv2.COLOR_HSV2BGR)
+
+    # 画像をいい感じの大きさで表示
+    # 取り込んだ画像の幅と高さを取得
+    height, width = image.shape[:2]
+    while height > 1000 or width > 1000:
+        height = height * 0.9
+        width = width * 0.9
+    cv2.namedWindow(image_path, cv2.WINDOW_NORMAL)  # ウィンドウをリサイズ可能に設定
+    cv2.resizeWindow(image_path, int(width), int(height))         # ウィンドウの初期サイズを設定
+    cv2.imshow(image_path, img_bgr)
+    cv2.waitKey(0)
+
+    #"""
     # コントラストを調整
-    #enhanced = cv2.equalizeHist(inverted)
+    enhanced = cv2.equalizeHist(image)
     enhanced = cv2.equalizeHist(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))
 
     # enhancedを表示
     pil_image = Image.fromarray(enhanced)
     pil_image.show()
-    """
+    #"""
     
+    """
     # エッジ検出
     edges = cv2.Canny(enhanced, 30, 150)
     
@@ -90,9 +111,9 @@ def correct_warp(image_path):
     else:
         print("ページの輪郭を検出できませんでした。")
         return None
+    """
 
 # 使用例
 if __name__ == "__main__":
-    corrected_image = correct_warp(r".\samples\DSC_1931.JPG")
-    if corrected_image:
-        print("歪み補正後の画像を保存しました。")
+    correct_warp(r".\samples\DSC_1935.JPG")
+    cv2.waitKey(0)

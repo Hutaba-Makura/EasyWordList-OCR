@@ -6,6 +6,8 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import pdist
 import os
 
+# description: 画像の文字認識を行うプログラムのサンプル
+
 # リーダーオブジェクトに日本語と英語を設定
 reader = easyocr.Reader(['ja', 'en'], gpu=True)
 
@@ -19,11 +21,11 @@ def reprint_filename(target_path: str):
     root, ext = os.path.splitext(target_path)
     is_file = True
     while is_file:
-        is_file = os.path.isfile(target_path + f"_{i}" + ext)
+        is_file = os.path.isfile(root + f"_{i}" + ext)
         if(not is_file):
             break
         i += 1
-    return target_path + f"_paint_{i}" + ext
+    return root + f"_paint_{i}" + ext
 
 
 def analyze_picture_tial(target_path: str):
