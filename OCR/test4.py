@@ -92,7 +92,7 @@ def reprint_filename():
 
 def main():
     global image_path
-    image_path = r".\samples\DSC_1932.JPG"
+    image_path = r".\samples\DSC_1930.JPG"
     image = cv2.imread(image_path)
     #enhanced_img = contrast_enhance(image) # 却下
     img_bgr = color_extract(image)
