@@ -44,9 +44,19 @@ def draw_text_area(image_path, response):
     image = cv2.imread(image_path)
     for text in response.text_annotations:
         vertices = text.bounding_poly.vertices
+        # すべての座標を時計回りに90度回転させる
         points = [(vertex.y, vertex.x) for vertex in vertices if vertex.x is not None and vertex.y is not None]
         if len(points) == 4:
             cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=(0, 0, 255), thickness=2)
+        else:
+            print("頂点数が不足しているためスキップしました:", points)
+    
+    # 一番大きい領域を青枠で囲う
+    if len(response.text_annotations) > 0:
+        vertices = response.text_annotations[0].bounding_poly.vertices
+        points = [(vertex.y, vertex.x) for vertex in vertices if vertex.x is not None and vertex.y is not None]
+        if len(points) == 4:
+            cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=(255, 0, 0), thickness=2)
         else:
             print("頂点数が不足しているためスキップしました:", points)
     cv2.imwrite('text_area.jpg', image)
@@ -54,8 +64,5 @@ def draw_text_area(image_path, response):
 
 # テキスト検出
 image_path = r".\samples\DSC_1937.JPG"
-#result = detect_text(image_path)
-#OCR_response.jsonに保存された結果を読み込む
-with open('OCR_response.json', 'r', encoding='utf-8') as f:
-    result = json.load(f)
+result = detect_text(image_path)
 draw_text_area(image_path, result)
