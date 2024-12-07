@@ -1,2 +1,4 @@
 #envフォルダを無視
 env/
+# GUI\easywordlist直下のnode_modulesフォルダを無視
+GUI/easywordlist/node_modules/

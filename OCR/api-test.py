@@ -5,6 +5,8 @@ import cv2
 import json
 import numpy as np
 from google.protobuf.json_format import MessageToDict
+from scipy.cluster.hierarchy import fcluster, linkage
+from scipy.spatial.distance import pdist
 
 # 環境変数からAPIキーのパスを取得
 api_key_path = os.getenv('CloudVisionAPIKey')
@@ -59,23 +61,31 @@ def draw_text_area(image_path, response):
             print("頂点数が不足しているためスキップしました:", points)
     
     # 原点に黒丸を描画　50pxくらいの大きさ
-    cv2.circle(image, (0, 0), 50, (0, 0, 0), thickness=-1)
+    # cv2.circle(image, (0, 0), 50, (0, 0, 0), thickness=-1)
 
-    # 一番大きい領域を青枠で囲う
-    if len(response.text_annotations) > 0:
-        vertices = response.text_annotations[0].bounding_poly.vertices
-        points = [
-            (int(original_width-vertex.y), int(vertex.x))  # Y 座標を反転
-            for vertex in vertices if vertex.x is not None and vertex.y is not None
-        ]
+    # OCR結果から座標のみを抽出し、クラスタリングの準備
+    coords = [
+        np.mean(
+            np.array([[original_width-vertex.y, vertex.x] for vertex in text.bounding_poly.vertices if vertex.x is not None and vertex.y is not None]),
+            axis=0
+        )
+        for text in response.text_annotations
+    ]
 
-        # points[0]に青丸を描画
-        cv2.circle(image, (points[0][1], points[0][0]), 25, (255, 0, 0), thickness=-1)
+    # 距離行列の作成とクラスタリング
+    distance_matrix = pdist(coords)
+    Z = linkage(distance_matrix, method='single')
+    clusters = fcluster(Z, t=100, criterion='distance')  # 50ピクセル以内を1グループに
 
-        if len(points) == 4:
-            cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=(255, 0, 0), thickness=2)  # 青枠
-        else:
-            print("頂点数が不足しているためスキップしました:", points)
+    # 各クラスタに基づいて枠を描画
+    for cluster_id in set(clusters):
+        cluster_points = [coords[i] for i in range(len(coords)) if clusters[i] == cluster_id]
+        # 各グループのバウンディングボックスを計算
+        all_x = [int(p[0]) for p in cluster_points]
+        all_y = [int(p[1]) for p in cluster_points]
+        bounding_box = [(min(all_x), min(all_y)), (max(all_x), max(all_y))]
+        cv2.rectangle(image, bounding_box[0], bounding_box[1], (255, 0, 0), 3)  # 青枠
+
 
     cv2.imwrite('text_area.jpg', image)
     print("テキスト領域をtext_area.jpgに保存しました。")
