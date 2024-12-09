@@ -1,4 +1,3 @@
-## color_hist.py  by KUDOH Shunsuke
 ##   Show a color histgram of selected pixels
 ##   Usage:
 ##       $ python3 color_hist.py image_file

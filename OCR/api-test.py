@@ -141,6 +141,6 @@ def draw_text_area(image_path, response):
 
 
 # テキスト検出
-image_path = r".\samples\DSC_1939.JPG"
+image_path = r".\samples\DSC_1937.JPG"
 result = detect_text(image_path)
 draw_text_area(image_path, result)
