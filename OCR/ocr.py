@@ -66,32 +66,33 @@ def scale_coordinates(vertices, original_width, original_height, resized_width, 
         (int(vertex.x * scale_x), int(vertex.y * scale_y)) for vertex in vertices
     ]
 
-# 結果をもとに各領域を赤枠で囲う
-def process_image(image_path, response):
-    # 元画像のサイズを取得
-    original_image = Image.open(image_path)
-    original_width, original_height = original_image.size
-    
+# 画像の座標を補正
+def correct_points(image_path, response):
     # 回転補正を適用
-    corrected_image = correct_orientation(image_path)
-    corrected_image.save("corrected_image.jpg")  # 補正後の画像を保存
-    corrected_width, corrected_height = corrected_image.size
+    image = correct_orientation(image_path)
+    original_width, original_height = image.size # 元画像のサイズを取得
 
-    # OpenCVで補正後画像を読み込み
-    image = cv2.imread("corrected_image.jpg")
+    # cloudVisionAPIから受け取った画像のサイズを取得
+    corrected_width = response.full_text_annotation.pages[0].width
+    corrected_height = response.full_text_annotation.pages[0].height
 
     for text in response.text_annotations:
         vertices = text.bounding_poly.vertices
         # 座標変換とスケール補正
         points = scale_coordinates(vertices, corrected_width, corrected_height, original_width, original_height)
         points = [(int(x), int(y)) for x, y in points]  # OpenCV形式に変換
-        # 頂点の順序を修正して回転を正す
-        cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=(255, 0, 0), thickness=2)
-    cv2.imwrite('text_area_corrected.jpg', image)
-
-    print("テキスト領域を囲んだ画像を保存しました。")
     
     return points, image
+
+# 受け取った座標群から各領域のバウンディングボックスを赤く囲む
+def draw_bounding_box(coords_list, image):
+    for points in coords_list:
+        cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=(0, 0, 255), thickness=2)
+    cv2.imwrite('text_area_corrected.jpg', image)
+    print("バウンディングボックスを保存しました。")
+    cv2.imshow('image', image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 # 各領域間の最短距離を計算する距離行列を作成
 def calculate_min_distance_matrix(coords_list):
@@ -101,30 +102,31 @@ def calculate_min_distance_matrix(coords_list):
     :return: 距離行列（各領域間の最短距離）
     """
     num_coords = len(coords_list)
-    distance_matrix = np.zeros((num_coords, num_coords))
+    distance_matrix = np.zeros((num_coords, num_coords))# 距離行列の初期化
     
     for i in range(num_coords):
         for j in range(i + 1, num_coords):
-            distances = cdist(coords_list[i], coords_list[j])  # 領域iとjのすべての頂点間の距離を計算
+            # NumPy配列に変換して2次元配列を保証
+            coords_i = np.array(coords_list[i], dtype=np.float32)
+            coords_j = np.array(coords_list[j], dtype=np.float32)
+            distances = cdist(coords_i, coords_j)  # 領域iとjのすべての頂点間の距離を計算
             min_distance = np.min(distances)  # 最短距離を取得
             distance_matrix[i, j] = min_distance
             distance_matrix[j, i] = min_distance  # 対称行列
 
     return distance_matrix
 
+
 # クラスタリングして各領域をグループ化、各グループを青枠で囲う
 # クラスタリング(領域間の最短距離が縦に25px以内、または横に50px以内の領域を同一クラスタとする)
 def clustering(coords_list, threshold=100):
     distance_matrix = calculate_min_distance_matrix(coords_list)
-    linkage_matrix = linkage(pdist(distance_matrix), method='ward')
-    clusters = fcluster(linkage_matrix, t=threshold, criterion='distance')
+    linkage_matrix = linkage(pdist(distance_matrix), method='ward') # 階層型クラスタリング
+    clusters = fcluster(linkage_matrix, t=threshold, criterion='distance') # クラスタリング結果を取得
     # クラスタリング結果をもとに各領域を青枠で囲う
     image = cv2.imread("text_area_corrected.jpg")
     for i, cluster in enumerate(clusters):
-        if cluster == 1:
-            color = (0, 255, 0)  # 緑枠
-        else:
-            color = (0, 0, 255)  # 青枠
+        color = (0, 255, 0)
         points = coords_list[i]
         cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=color, thickness=2)
     # クラスタリング結果を保存
@@ -134,13 +136,11 @@ def clustering(coords_list, threshold=100):
     cv2.imshow('image', image)
     return clusters
 
+
 image_path = r".\samples\DSC_1937.JPG"
 
 # メイン処理
 response = detect_text(image_path)
-coords_list, image = process_image(image_path, response)
+coords_list, image = correct_points(image_path, response)
 clusters = clustering(coords_list)
-cv2.imwrite('text_area_clustered.jpg', image)
-print("クラスタリング結果を保存しました。")
-
     
