@@ -74,7 +74,7 @@ def draw_bounding_boxes(image_path, response):
 
 # 実行例
 if __name__ == "__main__":
-    image_path = r".\tes.jpg"
+    image_path = r".\tes2.jpg"
 
     # OCRレスポンスを取得
     response = detect_text(image_path)
