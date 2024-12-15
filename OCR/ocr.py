@@ -25,7 +25,9 @@ client = vision.ImageAnnotatorClient(credentials=credentials)
 
 # テキスト検出
 def detect_text(image_path):
-    with open(image_path, 'rb') as f:
+    output_path = 'image_without_exif.jpg'
+    exif_data = remove_exif(image_path, output_path)
+    with open(output_path, 'rb') as f:
         image = f.read()
 
     # Vision APIに渡す形式に変換
@@ -40,65 +42,64 @@ def detect_text(image_path):
         json.dump(response_dict, f, ensure_ascii=False, indent=4)
 
     print("レスポンスをOCR_response.jsonに保存しました。")
-    return response
+    return response, output_path, exif_data
 
-# Exif情報を元に画像を回転して補正
-def correct_orientation(image_path):
+# 画像からEXIFメタデータを削除して保存
+def remove_exif(image_path, output_path):
+    """
+    Returns:
+        dict: A dictionary containing the original EXIF metadata.
+    """
     image = Image.open(image_path)
-    for orientation in ExifTags.TAGS.keys():
-        if ExifTags.TAGS[orientation] == 'Orientation':
-            break
-    exif = image._getexif()
-    if exif is not None and orientation in exif:
-        if exif[orientation] == 3:
-            image = image.rotate(180, expand=True)
-        elif exif[orientation] == 6:
-            image = image.rotate(270, expand=True)
-        elif exif[orientation] == 8:
-            image = image.rotate(90, expand=True)
-    return image
+    exif_data = {}
 
-# cloudVisionAPIから受け取った座標のスケールを元の画像のスケールに補正
-def scale_coordinates(vertices, corrected_width, corrected_height, original_width, original_height):
-    scale_x = original_width / corrected_width
-    scale_y = original_height / corrected_height
-    return [
-        (int(vertex.x * scale_x), int(vertex.y * scale_y)) for vertex in vertices
-    ]
+    # Extract EXIF metadata
+    if image._getexif() is not None:
+        exif_data = {
+            ExifTags.TAGS.get(tag, tag): value
+            for tag, value in image._getexif().items()
+            if tag in ExifTags.TAGS
+        }
 
-# 実際に画像の座標を補正する関数
-def correct_points(image_path, response):
-    # 回転補正を適用
-    image = correct_orientation(image_path)
-    original_width, original_height = image.size  # 元画像のサイズを取得
+    # Remove EXIF metadata
+    data = list(image.getdata())
+    image_without_exif = Image.new(image.mode, image.size)
+    image_without_exif.putdata(data)
+    image_without_exif.save(output_path)
 
-    # cloudVisionAPIから受け取った画像のサイズを取得
-    corrected_width = response.full_text_annotation.pages[0].width
-    corrected_height = response.full_text_annotation.pages[0].height
+    return exif_data
 
-    coords_list = []  # 各領域の座標を格納
-    for text in response.text_annotations:
-        vertices = text.bounding_poly.vertices
-        # 座標変換とスケール補正
-        points = scale_coordinates(vertices, corrected_width, corrected_height, original_width, original_height)
-        points = [(int(x), int(y)) for x, y in points]  # OpenCV形式に変換
-        coords_list.append(points)
+# OCRレスポンスからテキストのバウンディングボックスを取得
+def extract_coords(response):
+    annotations = response.text_annotations
 
-    # PIL画像をNumPy配列に変換（OpenCV形式に変換）
-    image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+    if not annotations:
+        print("No text detected in the image.")
+        return
 
-    return coords_list, image
+    # 最初の要素は全文に関する情報なのでスキップ
+    coords_list = []
+    for annotation in annotations[1:]:
+        # バウンディングボックスの頂点を取得
+        vertices = annotation.bounding_poly.vertices
 
+        # 頂点の座標をリストに変換　足りない場合は補完
+        coords = []
+        for vertex in vertices:
+            coords.append([vertex.x, vertex.y])
+        if len(coords) < 4:
+            coords = np.pad(coords, ((0, 4 - len(coords)), (0, 0)), mode='constant')
+        coords_list.append(coords)
+    
+    return coords_list
 
 # 受け取った座標群から各領域のバウンディングボックスを赤く囲む
-def draw_bounding_box(coords_list, image):
+def draw_bounding_box(coords_list, image_path):
+    image = cv2.imread(image_path)
     for points in coords_list:
         cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=(0, 0, 255), thickness=2)
     cv2.imwrite('text_area_corrected.jpg', image)
     print("text_area_corrected.jpgを保存しました。")
-    # cv2.imshow('image', image)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
 
 # 各領域間の最短距離を計算する距離行列を作成
 def calculate_min_distance_matrix(coords_list):
@@ -122,6 +123,38 @@ def calculate_min_distance_matrix(coords_list):
 
     return distance_matrix
 
+# exif_dataをもとに画像と座標を回転させる
+def rotate_image_and_coords(image_path, coords_list, exif_data):
+    # 画像を読み込む
+    image = cv2.imread(image_path)
+
+    # 画像の向きを取得
+    orientation = exif_data.get('Orientation', 1)
+
+    # 画像の向きに応じて回転
+    if orientation == 3:
+        image = cv2.rotate(image, cv2.ROTATE_180)
+    elif orientation == 6:
+        image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+    elif orientation == 8:
+        image = cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+    # 座標を回転
+    if orientation == 3:
+        for coords in coords_list:
+            for point in coords:
+                point[0] = image.shape[1] - point[0]
+                point[1] = image.shape[0] - point[1]
+    elif orientation == 6:
+        for coords in coords_list:
+            for point in coords:
+                point[0], point[1] = point[1], image.shape[1] - point[0]
+    elif orientation == 8:
+        for coords in coords_list:
+            for point in coords:
+                point[0], point[1] = image.shape[0] - point[1], point[0]
+
+    return image, coords_list
 
 # クラスタリングして各領域をグループ化、各グループを青枠で囲う
 # クラスタリング(領域間の最短距離が縦に25px以内、または横に50px以内の領域を同一クラスタとする)
@@ -145,8 +178,7 @@ def clustering(coords_list, image, threshold=100):
 image_path = r".\samples\DSC_1937.JPG"
 
 # メイン処理
-response = detect_text(image_path)
-coords_list, image = correct_points(image_path, response)
-draw_bounding_box(coords_list, image)
-# clusters = clustering(coords_list, image, threshold=100)
+response, output_path, exif_data = detect_text(image_path)
+coords_list = extract_coords(response)
+draw_bounding_box(coords_list, output_path)
     
