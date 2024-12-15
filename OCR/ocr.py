@@ -59,40 +59,46 @@ def correct_orientation(image_path):
     return image
 
 # cloudVisionAPIから受け取った座標のスケールを元の画像のスケールに補正
-def scale_coordinates(vertices, original_width, original_height, resized_width, resized_height):
-    scale_x = original_width / resized_width
-    scale_y = original_height / resized_height
+def scale_coordinates(vertices, corrected_width, corrected_height, original_width, original_height):
+    scale_x = original_width / corrected_width
+    scale_y = original_height / corrected_height
     return [
         (int(vertex.x * scale_x), int(vertex.y * scale_y)) for vertex in vertices
     ]
 
-# 画像の座標を補正
+# 実際に画像の座標を補正する関数
 def correct_points(image_path, response):
     # 回転補正を適用
     image = correct_orientation(image_path)
-    original_width, original_height = image.size # 元画像のサイズを取得
+    original_width, original_height = image.size  # 元画像のサイズを取得
 
     # cloudVisionAPIから受け取った画像のサイズを取得
     corrected_width = response.full_text_annotation.pages[0].width
     corrected_height = response.full_text_annotation.pages[0].height
 
+    coords_list = []  # 各領域の座標を格納
     for text in response.text_annotations:
         vertices = text.bounding_poly.vertices
         # 座標変換とスケール補正
         points = scale_coordinates(vertices, corrected_width, corrected_height, original_width, original_height)
         points = [(int(x), int(y)) for x, y in points]  # OpenCV形式に変換
-    
-    return points, image
+        coords_list.append(points)
+
+    # PIL画像をNumPy配列に変換（OpenCV形式に変換）
+    image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+
+    return coords_list, image
+
 
 # 受け取った座標群から各領域のバウンディングボックスを赤く囲む
 def draw_bounding_box(coords_list, image):
     for points in coords_list:
         cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=(0, 0, 255), thickness=2)
     cv2.imwrite('text_area_corrected.jpg', image)
-    print("バウンディングボックスを保存しました。")
-    cv2.imshow('image', image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    print("text_area_corrected.jpgを保存しました。")
+    # cv2.imshow('image', image)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
 
 # 各領域間の最短距離を計算する距離行列を作成
 def calculate_min_distance_matrix(coords_list):
@@ -102,7 +108,7 @@ def calculate_min_distance_matrix(coords_list):
     :return: 距離行列（各領域間の最短距離）
     """
     num_coords = len(coords_list)
-    distance_matrix = np.zeros((num_coords, num_coords))# 距離行列の初期化
+    distance_matrix = np.zeros((num_coords, num_coords))
     
     for i in range(num_coords):
         for j in range(i + 1, num_coords):
@@ -119,12 +125,11 @@ def calculate_min_distance_matrix(coords_list):
 
 # クラスタリングして各領域をグループ化、各グループを青枠で囲う
 # クラスタリング(領域間の最短距離が縦に25px以内、または横に50px以内の領域を同一クラスタとする)
-def clustering(coords_list, threshold=100):
+def clustering(coords_list, image, threshold=100):
     distance_matrix = calculate_min_distance_matrix(coords_list)
     linkage_matrix = linkage(pdist(distance_matrix), method='ward') # 階層型クラスタリング
     clusters = fcluster(linkage_matrix, t=threshold, criterion='distance') # クラスタリング結果を取得
     # クラスタリング結果をもとに各領域を青枠で囲う
-    image = cv2.imread("text_area_corrected.jpg")
     for i, cluster in enumerate(clusters):
         color = (0, 255, 0)
         points = coords_list[i]
@@ -142,5 +147,6 @@ image_path = r".\samples\DSC_1937.JPG"
 # メイン処理
 response = detect_text(image_path)
 coords_list, image = correct_points(image_path, response)
-clusters = clustering(coords_list)
+draw_bounding_box(coords_list, image)
+# clusters = clustering(coords_list, image, threshold=100)
     
