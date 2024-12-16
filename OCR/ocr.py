@@ -206,7 +206,7 @@ def main():
     image, coords_list = rotate_image_and_coords(image, coords_list, exif_data) # 画像と座標を回転
     clustered_boxes = cluster_bounding_boxes(coords_list, width=80, height=30, threshold=30)
     draw_bounding_box(clustered_boxes, image, (255, 0, 0)) # 青色で描画
-    culstered_boxex = cluster_bounding_boxes(culstered_boxex, width=80, height=30, threshold=30)
+    clustered_boxes = cluster_bounding_boxes(clustered_boxes, width=80, height=30, threshold=30)
     draw_bounding_box(clustered_boxes, image, (0, 255, 0)) # 緑色で描画
     # 50ピクセルの長さの緑色の線を引く
     cv2.line(image, (0, 50), (50, 50), (0, 255, 0), 2)
