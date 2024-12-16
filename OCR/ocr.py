@@ -94,25 +94,26 @@ def extract_coords(response):
     return coords_list
 
 # 受け取った座標群から各領域のバウンディングボックスを赤く囲む
-def draw_bounding_box(coords_list, image):
+def draw_bounding_box(coords_list, image, color):
     for points in coords_list:
-        cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=(0, 0, 255), thickness=2)
+        cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=color, thickness=2)
     print("バウンディングボックスを描画しました。")
 
 # exif_dataをもとに画像と座標を回転させる
 def rotate_image_and_coords(image, coords_list, exif_data):
     # 画像の向きを取得
     orientation = exif_data.get('Orientation', 1)
+    print(f"Orientation: {orientation}")
 
     # 画像の向きに応じて回転
-    if orientation == 3:
+    if orientation == 3: # 180度回転
         image = cv2.rotate(image, cv2.ROTATE_180)
-    elif orientation == 6:
+    elif orientation == 6: # 反時計回りに90度回転
         image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
-    elif orientation == 8:
+    elif orientation == 8: # 時計回りに90度回転
         image = cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-    # 座標を回転
+    # バウンディングボックスの座標を回転
     if orientation == 3:
         for coords in coords_list:
             for point in coords:
@@ -121,57 +122,78 @@ def rotate_image_and_coords(image, coords_list, exif_data):
     elif orientation == 6:
         for coords in coords_list:
             for point in coords:
-                point[0], point[1] = point[1], image.shape[1] - point[0]
+                point[0], point[1] = image.shape[1] - point[1], point[0]
     elif orientation == 8:
         for coords in coords_list:
             for point in coords:
+                point[0], point[1] = point[1], image.shape[0] - point[0]
+    
+    """
+    # クラスタリングされたバウンディングボックスの座標を回転
+    if orientation == 3:
+        for coords in clustered_boxes:
+            for point in coords:
+                point[0] = image.shape[1] - point[0]
+                point[1] = image.shape[0] - point[1]
+    elif orientation == 6:
+        for coords in clustered_boxes:
+            for point in coords:
+                point[0], point[1] = point[1], image.shape[1] - point[0]
+    elif orientation == 8:
+        for coords in clustered_boxes:
+            for point in coords:
                 point[0], point[1] = image.shape[0] - point[1], point[0]
-
-    # 画像を保存
-    cv2.imwrite('text_area_corrected.jpg', image)
-    print("text_area_corrected.jpgを保存しました。")
+    """
 
     return image, coords_list
 
-# 各領域間の最短距離を計算する距離行列を作成
-def calculate_min_distance_matrix(coords_list):
+def cluster_bounding_boxes(coords_list, width, height, threshold):
     """
-    領域間の最短距離を計算する距離行列を作成
-    :param coords_list: 各領域のバウンディングボックスの頂点リスト
-    :return: 距離行列（各領域間の最短距離）
+    Clusters bounding boxes based on horizontal, vertical proximity thresholds, and minimum distance.
+
+    Args:
+        coords_list (list): List of bounding box coordinate arrays.
+        width (int): Maximum horizontal distance to consider for clustering.
+        height (int): Maximum vertical distance to consider for clustering.
+        threshold (float): Minimum distance threshold for clustering.
+
+    Returns:
+        list: List of clustered bounding boxes, where each cluster is represented by a single bounding box.
     """
-    num_coords = len(coords_list)
-    distance_matrix = np.zeros((num_coords, num_coords))
-    
-    for i in range(num_coords):
-        for j in range(i + 1, num_coords):
-            # NumPy配列に変換して2次元配列を保証
-            coords_i = np.array(coords_list[i], dtype=np.float32)
-            coords_j = np.array(coords_list[j], dtype=np.float32)
-            distances = cdist(coords_i, coords_j)  # 領域iとjのすべての頂点間の距離を計算
-            min_distance = np.min(distances)  # 最短距離を取得
-            distance_matrix[i, j] = min_distance
-            distance_matrix[j, i] = min_distance  # 対称行列
+    # 各バウンディングボックスの中心を計算
+    centroids = []
+    for coords in coords_list:
+        x_coords = [point[0] for point in coords]
+        y_coords = [point[1] for point in coords]
+        centroid = [np.mean(x_coords), np.mean(y_coords)]
+        centroids.append(centroid)
 
-    return distance_matrix
+    # 中心間の距離を計算
+    pairwise_distances = cdist(centroids, centroids, metric='euclidean')
 
-# クラスタリングして各領域をグループ化、各グループを青枠で囲う
-# クラスタリング(領域間の最短距離が縦に25px以内、または横に50px以内の領域を同一クラスタとする)
-def clustering(coords_list, image, threshold=100):
-    distance_matrix = calculate_min_distance_matrix(coords_list)
-    linkage_matrix = linkage(pdist(distance_matrix), method='ward') # 階層型クラスタリング
-    clusters = fcluster(linkage_matrix, t=threshold, criterion='distance') # クラスタリング結果を取得
-    # クラスタリング結果をもとに各領域を青枠で囲う
-    for i, cluster in enumerate(clusters):
-        color = (0, 255, 0)
-        points = coords_list[i]
-        cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=color, thickness=2)
-    # クラスタリング結果を保存
-    cv2.imwrite('text_area_clustered.jpg', image)
-    print("クラスタリング結果を保存しました。")
-    # 画像を表示
-    cv2.imshow('image', image)
-    return clusters
+    # クラスタリング
+    linkage_matrix = linkage(pdist(centroids), method='single')
+
+    # クラスタリングの結果を取得
+    clusters = fcluster(linkage_matrix, t=max(width, height, threshold), criterion='distance')
+
+    # クラスタごとにバウンディングボックスをマージ
+    clustered_boxes = []
+    for cluster_id in set(clusters):
+        cluster_coords = [coords_list[i] for i in range(len(coords_list)) if clusters[i] == cluster_id]
+
+        # バウンディングボックスをマージ
+        all_x = [point[0] for box in cluster_coords for point in box]
+        all_y = [point[1] for box in cluster_coords for point in box]
+        merged_box = [
+            [min(all_x), min(all_y)],
+            [max(all_x), min(all_y)],
+            [max(all_x), max(all_y)],
+            [min(all_x), max(all_y)]
+        ]
+        clustered_boxes.append(merged_box)
+
+    return clustered_boxes
 
 
 def main():
@@ -180,8 +202,17 @@ def main():
     # メイン処理
     response, exif_data, image = detect_text(image_path)
     coords_list = extract_coords(response)
-    draw_bounding_box(coords_list, image)
-    image, coords_list = rotate_image_and_coords(image, coords_list, exif_data)
+    draw_bounding_box(coords_list, image, (0, 0, 255)) # 赤色で描画
+    image, coords_list = rotate_image_and_coords(image, coords_list, exif_data) # 画像と座標を回転
+    clustered_boxes = cluster_bounding_boxes(coords_list, width=80, height=30, threshold=30)
+    draw_bounding_box(clustered_boxes, image, (255, 0, 0)) # 青色で描画
+    culstered_boxex = cluster_bounding_boxes(culstered_boxex, width=80, height=30, threshold=30)
+    draw_bounding_box(clustered_boxes, image, (0, 255, 0)) # 緑色で描画
+    # 50ピクセルの長さの緑色の線を引く
+    cv2.line(image, (0, 50), (50, 50), (0, 255, 0), 2)
+    # 画像を保存
+    cv2.imwrite('text_area_corrected.jpg', image)
+    print("text_area_corrected.jpgを保存しました。")
     
 if __name__ == '__main__':
     main()
