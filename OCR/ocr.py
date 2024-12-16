@@ -42,7 +42,7 @@ def detect_text(image_path):
         json.dump(response_dict, f, ensure_ascii=False, indent=4)
 
     print("レスポンスをOCR_response.jsonに保存しました。")
-    return response, output_path, exif_data
+    return response, exif_data, cv2.imread(output_path)
 
 # 画像からEXIFメタデータを削除して保存
 def remove_exif(image_path, output_path):
@@ -94,40 +94,13 @@ def extract_coords(response):
     return coords_list
 
 # 受け取った座標群から各領域のバウンディングボックスを赤く囲む
-def draw_bounding_box(coords_list, image_path):
-    image = cv2.imread(image_path)
+def draw_bounding_box(coords_list, image):
     for points in coords_list:
         cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=(0, 0, 255), thickness=2)
-    cv2.imwrite('text_area_corrected.jpg', image)
-    print("text_area_corrected.jpgを保存しました。")
-
-# 各領域間の最短距離を計算する距離行列を作成
-def calculate_min_distance_matrix(coords_list):
-    """
-    領域間の最短距離を計算する距離行列を作成
-    :param coords_list: 各領域のバウンディングボックスの頂点リスト
-    :return: 距離行列（各領域間の最短距離）
-    """
-    num_coords = len(coords_list)
-    distance_matrix = np.zeros((num_coords, num_coords))
-    
-    for i in range(num_coords):
-        for j in range(i + 1, num_coords):
-            # NumPy配列に変換して2次元配列を保証
-            coords_i = np.array(coords_list[i], dtype=np.float32)
-            coords_j = np.array(coords_list[j], dtype=np.float32)
-            distances = cdist(coords_i, coords_j)  # 領域iとjのすべての頂点間の距離を計算
-            min_distance = np.min(distances)  # 最短距離を取得
-            distance_matrix[i, j] = min_distance
-            distance_matrix[j, i] = min_distance  # 対称行列
-
-    return distance_matrix
+    print("バウンディングボックスを描画しました。")
 
 # exif_dataをもとに画像と座標を回転させる
-def rotate_image_and_coords(image_path, coords_list, exif_data):
-    # 画像を読み込む
-    image = cv2.imread(image_path)
-
+def rotate_image_and_coords(image, coords_list, exif_data):
     # 画像の向きを取得
     orientation = exif_data.get('Orientation', 1)
 
@@ -154,7 +127,33 @@ def rotate_image_and_coords(image_path, coords_list, exif_data):
             for point in coords:
                 point[0], point[1] = image.shape[0] - point[1], point[0]
 
+    # 画像を保存
+    cv2.imwrite('text_area_corrected.jpg', image)
+    print("text_area_corrected.jpgを保存しました。")
+
     return image, coords_list
+
+# 各領域間の最短距離を計算する距離行列を作成
+def calculate_min_distance_matrix(coords_list):
+    """
+    領域間の最短距離を計算する距離行列を作成
+    :param coords_list: 各領域のバウンディングボックスの頂点リスト
+    :return: 距離行列（各領域間の最短距離）
+    """
+    num_coords = len(coords_list)
+    distance_matrix = np.zeros((num_coords, num_coords))
+    
+    for i in range(num_coords):
+        for j in range(i + 1, num_coords):
+            # NumPy配列に変換して2次元配列を保証
+            coords_i = np.array(coords_list[i], dtype=np.float32)
+            coords_j = np.array(coords_list[j], dtype=np.float32)
+            distances = cdist(coords_i, coords_j)  # 領域iとjのすべての頂点間の距離を計算
+            min_distance = np.min(distances)  # 最短距離を取得
+            distance_matrix[i, j] = min_distance
+            distance_matrix[j, i] = min_distance  # 対称行列
+
+    return distance_matrix
 
 # クラスタリングして各領域をグループ化、各グループを青枠で囲う
 # クラスタリング(領域間の最短距離が縦に25px以内、または横に50px以内の領域を同一クラスタとする)
@@ -175,10 +174,14 @@ def clustering(coords_list, image, threshold=100):
     return clusters
 
 
-image_path = r".\samples\DSC_1937.JPG"
+def main():
+    image_path = r".\samples\DSC_1937.JPG"
 
-# メイン処理
-response, output_path, exif_data = detect_text(image_path)
-coords_list = extract_coords(response)
-draw_bounding_box(coords_list, output_path)
+    # メイン処理
+    response, exif_data, image = detect_text(image_path)
+    coords_list = extract_coords(response)
+    draw_bounding_box(coords_list, image)
+    image, coords_list = rotate_image_and_coords(image, coords_list, exif_data)
     
+if __name__ == '__main__':
+    main()
