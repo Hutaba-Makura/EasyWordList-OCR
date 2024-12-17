@@ -128,26 +128,9 @@ def rotate_image_and_coords(image, coords_list, exif_data):
             for point in coords:
                 point[0], point[1] = point[1], image.shape[0] - point[0]
     
-    """
-    # クラスタリングされたバウンディングボックスの座標を回転
-    if orientation == 3:
-        for coords in clustered_boxes:
-            for point in coords:
-                point[0] = image.shape[1] - point[0]
-                point[1] = image.shape[0] - point[1]
-    elif orientation == 6:
-        for coords in clustered_boxes:
-            for point in coords:
-                point[0], point[1] = point[1], image.shape[1] - point[0]
-    elif orientation == 8:
-        for coords in clustered_boxes:
-            for point in coords:
-                point[0], point[1] = image.shape[0] - point[1], point[0]
-    """
-
     return image, coords_list
 
-def cluster_bounding_boxes(coords_list, width, height, threshold):
+def cluster_bounding_boxes(coords_list, threshold):
     """
     Clusters bounding boxes based on horizontal, vertical proximity thresholds, and minimum distance.
 
@@ -175,7 +158,8 @@ def cluster_bounding_boxes(coords_list, width, height, threshold):
     linkage_matrix = linkage(pdist(centroids), method='single')
 
     # クラスタリングの結果を取得
-    clusters = fcluster(linkage_matrix, t=max(width, height, threshold), criterion='distance')
+    clusters = fcluster(linkage_matrix, t=threshold, criterion='distance')
+
 
     # クラスタごとにバウンディングボックスをマージ
     clustered_boxes = []
@@ -204,9 +188,9 @@ def main():
     coords_list = extract_coords(response)
     draw_bounding_box(coords_list, image, (0, 0, 255)) # 赤色で描画
     image, coords_list = rotate_image_and_coords(image, coords_list, exif_data) # 画像と座標を回転
-    clustered_boxes = cluster_bounding_boxes(coords_list, width=80, height=30, threshold=30)
+    clustered_boxes = cluster_bounding_boxes(coords_list, threshold=30)
     draw_bounding_box(clustered_boxes, image, (255, 0, 0)) # 青色で描画
-    clustered_boxes = cluster_bounding_boxes(clustered_boxes, width=80, height=30, threshold=30)
+    clustered_boxes = cluster_bounding_boxes(clustered_boxes, threshold=30)
     draw_bounding_box(clustered_boxes, image, (0, 255, 0)) # 緑色で描画
     # 50ピクセルの長さの緑色の線を引く
     cv2.line(image, (0, 50), (50, 50), (0, 255, 0), 2)
