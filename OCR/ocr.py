@@ -9,6 +9,7 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import cdist
 from PIL import Image, ExifTags
+from itertools import combinations
 
 # 環境変数からAPIキーのパスを取得
 api_key_path = os.getenv('CloudVisionAPIKey')
@@ -132,34 +133,27 @@ def rotate_image_and_coords(image, coords_list, exif_data):
 
 def cluster_bounding_boxes(coords_list, threshold):
     """
-    Clusters bounding boxes based on horizontal, vertical proximity thresholds, and minimum distance.
+    Clusters bounding boxes based on proximity thresholds.
 
     Args:
         coords_list (list): List of bounding box coordinate arrays.
-        width (int): Maximum horizontal distance to consider for clustering.
-        height (int): Maximum vertical distance to consider for clustering.
         threshold (float): Minimum distance threshold for clustering.
 
     Returns:
-        list: List of clustered bounding boxes, where each cluster is represented by a single bounding box.
+        list: List of clustered bounding boxes.
     """
     # 各バウンディングボックスの中心を計算
     centroids = []
     for coords in coords_list:
+        # 入力が単純なバウンディングボックス（4頂点）であることを確認
         x_coords = [point[0] for point in coords]
         y_coords = [point[1] for point in coords]
-        centroid = [np.mean(x_coords), np.mean(y_coords)]
+        centroid = [np.mean(x_coords), np.mean(y_coords)]  # 中心座標を計算
         centroids.append(centroid)
-
-    # 中心間の距離を計算
-    pairwise_distances = cdist(centroids, centroids, metric='euclidean')
 
     # クラスタリング
     linkage_matrix = linkage(pdist(centroids), method='single')
-
-    # クラスタリングの結果を取得
     clusters = fcluster(linkage_matrix, t=threshold, criterion='distance')
-
 
     # クラスタごとにバウンディングボックスをマージ
     clustered_boxes = []
@@ -179,6 +173,110 @@ def cluster_bounding_boxes(coords_list, threshold):
 
     return clustered_boxes
 
+def calculate_box_distance(box1, box2):
+    """
+    2つのバウンディングボックスの最短距離を計算します。
+
+    Returns:    
+        float: 2つのバウンディングボックスの最短距離。
+    """
+    # Extract all edges (line segments) of each box
+    def get_edges(box):
+        return [(box[i], box[(i + 1) % 4]) for i in range(4)]
+
+    edges1 = get_edges(box1)
+    edges2 = get_edges(box2)
+    
+    # Compute the minimum distance between all edges
+    min_distance = float('inf')
+    for (p1, q1) in edges1:
+        for (p2, q2) in edges2:
+            distance = segment_distance(p1, q1, p2, q2)
+            min_distance = min(min_distance, distance)
+    return min_distance
+
+def segment_distance(p1, q1, p2, q2):
+    """
+    2つの線分の最短距離を計算します。
+
+    Returns:
+        float: 2つの線分の最短距離。
+    """
+    def point_to_segment_distance(p, a, b):
+        # Project point p onto line segment a-b
+        ab = np.array(b) - np.array(a)
+        ap = np.array(p) - np.array(a)
+        t = np.dot(ap, ab) / np.dot(ab, ab)
+        t = max(0, min(1, t))  # Clamp t to the segment
+        closest = a + t * ab
+        return np.linalg.norm(p - closest)
+    
+    # Distance between all combinations of endpoints
+    distances = [
+        point_to_segment_distance(np.array(p1), np.array(p2), np.array(q2)),
+        point_to_segment_distance(np.array(q1), np.array(p2), np.array(q2)),
+        point_to_segment_distance(np.array(p2), np.array(p1), np.array(q1)),
+        point_to_segment_distance(np.array(q2), np.array(p1), np.array(q1))
+    ]
+    return min(distances)
+
+def is_overlapping(box1, box2):
+    """
+    Check if two bounding boxes overlap.
+    
+    Args:
+        box1, box2: List of coordinates [[x1, y1], ..., [x4, y4]].
+
+    Returns:
+        bool: True if the boxes overlap, otherwise False.
+    """
+    x1_min = min(p[0] for p in box1)
+    x1_max = max(p[0] for p in box1)
+    y1_min = min(p[1] for p in box1)
+    y1_max = max(p[1] for p in box1)
+
+    x2_min = min(p[0] for p in box2)
+    x2_max = max(p[0] for p in box2)
+    y2_min = min(p[1] for p in box2)
+    y2_max = max(p[1] for p in box2)
+
+    # Check for overlap
+    return not (x1_max < x2_min or x2_max < x1_min or y1_max < y2_min or y2_max < y1_min)
+
+def merge_boxes_with_overlap(boxes, threshold):
+    """
+    Merge bounding boxes considering both overlap and distance.
+
+    Args:
+        boxes (list): List of bounding boxes [[x1, y1], ..., [x4, y4]].
+        threshold (float): Distance threshold for merging.
+
+    Returns:
+        list: List of merged bounding boxes.
+    """
+    merged = []
+    while boxes:
+        base_box = boxes.pop(0)
+        i = 0
+        while i < len(boxes):
+            box = boxes[i]
+            # Check overlap or distance
+            if is_overlapping(base_box, box) or calculate_box_distance(base_box, box) < threshold:
+                # Merge boxes by taking the outer bounds
+                all_x = [p[0] for p in base_box + box]
+                all_y = [p[1] for p in base_box + box]
+                base_box = [
+                    [min(all_x), min(all_y)],
+                    [max(all_x), min(all_y)],
+                    [max(all_x), max(all_y)],
+                    [min(all_x), max(all_y)]
+                ]
+                boxes.pop(i)  # Remove the merged box
+            else:
+                i += 1
+        merged.append(base_box)
+    return merged
+
 
 def main():
     image_path = r".\samples\DSC_1937.JPG"
@@ -188,10 +286,11 @@ def main():
     coords_list = extract_coords(response)
     draw_bounding_box(coords_list, image, (0, 0, 255)) # 赤色で描画
     image, coords_list = rotate_image_and_coords(image, coords_list, exif_data) # 画像と座標を回転
-    clustered_boxes = cluster_bounding_boxes(coords_list, threshold=30)
-    draw_bounding_box(clustered_boxes, image, (255, 0, 0)) # 青色で描画
-    clustered_boxes = cluster_bounding_boxes(clustered_boxes, threshold=30)
-    draw_bounding_box(clustered_boxes, image, (0, 255, 0)) # 緑色で描画
+    # clustered_boxes = cluster_bounding_boxes(coords_list, threshold=80) # 早いけど精度が低い
+    clustered_boxes = merge_boxes_with_overlap(coords_list, threshold=20) # 遅いけど精度が高い
+    #draw_bounding_box(clustered_boxes, image, (255, 0, 0)) # 青色で描画
+    merged_boxes = merge_boxes_with_overlap(clustered_boxes, threshold=20)
+    draw_bounding_box(merged_boxes, image, (255, 0, 0)) # 青色で描画
     # 50ピクセルの長さの緑色の線を引く
     cv2.line(image, (0, 50), (50, 50), (0, 255, 0), 2)
     # 画像を保存
