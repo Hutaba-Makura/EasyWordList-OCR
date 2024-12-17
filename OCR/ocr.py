@@ -277,9 +277,34 @@ def merge_boxes_with_overlap(boxes, threshold):
         merged.append(base_box)
     return merged
 
+# API用のmain関数
+def ocr_document(image_path):
+     # APIを使ってテキストを検出, exif_dataも取得
+    response, exif_data, image = detect_text(image_path)
+    # テキストのバウンディングボックスの座標群を取得
+    coords_list = extract_coords(response)
+    draw_bounding_box(coords_list, image, (0, 0, 255)) # 赤色で描画
+    # 画像と座標を回転
+    image, coords_list = rotate_image_and_coords(image, coords_list, exif_data)
+
+    # 一回目のクラスタリング
+    clustered_boxes = cluster_bounding_boxes(coords_list, threshold=80) # 早いけど精度が低い
+    # clustered_boxes = merge_boxes_with_overlap(coords_list, threshold=10) # 遅いけど精度が高い
+    #draw_bounding_box(clustered_boxes, image, (255, 0, 0)) # 青色で描画
+
+    # 二回目のクラスタリング
+    merged_boxes = merge_boxes_with_overlap(clustered_boxes, threshold=10)
+    draw_bounding_box(merged_boxes, image, (255, 0, 0)) # 青色で描画
+
+    # 画像を保存
+    cv2.imwrite('text_area_corrected.jpg', image)
+    print("text_area_corrected.jpgを保存しました。")
+
+    return coords_list, merged_boxes
+
 
 def main():
-    image_path = r".\samples\DSC_1934.JPG"
+    image_path = r".\samples\DSC_1936.JPG"
 
     # メイン処理
     response, exif_data, image = detect_text(image_path)
