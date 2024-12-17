@@ -279,17 +279,17 @@ def merge_boxes_with_overlap(boxes, threshold):
 
 
 def main():
-    image_path = r".\samples\DSC_1937.JPG"
+    image_path = r".\samples\DSC_1934.JPG"
 
     # メイン処理
     response, exif_data, image = detect_text(image_path)
     coords_list = extract_coords(response)
     draw_bounding_box(coords_list, image, (0, 0, 255)) # 赤色で描画
     image, coords_list = rotate_image_and_coords(image, coords_list, exif_data) # 画像と座標を回転
-    # clustered_boxes = cluster_bounding_boxes(coords_list, threshold=80) # 早いけど精度が低い
-    clustered_boxes = merge_boxes_with_overlap(coords_list, threshold=20) # 遅いけど精度が高い
+    clustered_boxes = cluster_bounding_boxes(coords_list, threshold=80) # 早いけど精度が低い
+    # clustered_boxes = merge_boxes_with_overlap(coords_list, threshold=10) # 遅いけど精度が高い
     #draw_bounding_box(clustered_boxes, image, (255, 0, 0)) # 青色で描画
-    merged_boxes = merge_boxes_with_overlap(clustered_boxes, threshold=20)
+    merged_boxes = merge_boxes_with_overlap(clustered_boxes, threshold=10)
     draw_bounding_box(merged_boxes, image, (255, 0, 0)) # 青色で描画
     # 50ピクセルの長さの緑色の線を引く
     cv2.line(image, (0, 50), (50, 50), (0, 255, 0), 2)
