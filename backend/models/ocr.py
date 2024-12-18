@@ -131,6 +131,7 @@ def rotate_image_and_coords(image, coords_list, exif_data):
     
     return image, coords_list
 
+# バウンディングボックスを中心間の距離でクラスタリング
 def cluster_bounding_boxes(coords_list, threshold):
     """
     Clusters bounding boxes based on proximity thresholds.
@@ -243,6 +244,7 @@ def is_overlapping(box1, box2):
     # Check for overlap
     return not (x1_max < x2_min or x2_max < x1_min or y1_max < y2_min or y2_max < y1_min)
 
+# バウンディングボックスを重複と最短距離の両方を考慮してマージ
 def merge_boxes_with_overlap(boxes, threshold):
     """
     Merge bounding boxes considering both overlap and distance.

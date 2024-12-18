@@ -3,7 +3,7 @@ import openpyxl as px
 DATA_PATH = 'data.xlsx'
 
 # data.xlsxに単語と意味を追加する関数
-def addWord(wordset):
+def addWord(wordset: dict):
     wb = px.load_workbook(DATA_PATH)  # ワークブックを取得
     ws = wb.active
 
@@ -26,7 +26,7 @@ def getWords():
 
 # 送られたデータから特定の単語を編集する関数
 # 行番号を取得して、その行の意味を編集する
-def editWord(wordset, row):
+def editWord(wordset: dict, row):
     wb = px.load_workbook(DATA_PATH)  # ワークブックを取得
     ws = wb.active
 
@@ -47,4 +47,16 @@ def deleteWord(row):
 
     ws.delete_rows(row)
 
+    wb.save(DATA_PATH)  # 保存
+
+# 受け取った辞書からWordlistを一新する関数
+def updateWordlist(wordlist):
+    wb = px.load_workbook(DATA_PATH)  # ワークブックを取得
+    ws = wb.active
+    
+    ws.delete_rows(2, ws.max_row) # 既存のデータを削除
+
+    for word, mean in wordlist.items():
+        ws.append([word, mean])
+    
     wb.save(DATA_PATH)  # 保存
