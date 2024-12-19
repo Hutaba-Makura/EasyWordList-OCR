@@ -94,7 +94,7 @@ def extract_coords(response):
     
     return coords_list
 
-# 受け取った座標群から各領域のバウンディングボックスを赤く囲む
+# 受け取った座標群から各領域のバウンディングボックスを指定の色で描画
 def draw_bounding_box(coords_list, image, color):
     for points in coords_list:
         cv2.polylines(image, [np.array(points, dtype=np.int32)], isClosed=True, color=color, thickness=2)

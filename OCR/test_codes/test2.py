@@ -27,7 +27,7 @@ def reprint_filename(target_path: str):
         i += 1
     return root + f"_paint_{i}" + ext
 
-
+# 画像のテキスト領域を解析
 def analyze_picture_tial(target_path: str):
     image = cv2.imread(target_path)
     # グレースケール化

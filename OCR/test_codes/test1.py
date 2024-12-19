@@ -5,7 +5,7 @@ import cv2
 # リーダーオブジェクトに日本語と英語を設定
 reader = easyocr.Reader(['ja','en'],gpu = True)
 
-
+# 画像のテキスト領域を解析
 def analyze_picture(target_path: str):
     draw_chararea(target_path, reader.readtext(target_path))
 
@@ -20,7 +20,7 @@ def analyze_picture_tial(target_path: str):
     cv2.imwrite("thresh.png", img_thresh)
     draw_chararea("thresh.png", reader.readtext("thresh.png"))
 
-# <追加>入力画像内に文字列の領域を赤枠で囲う
+# 入力画像内に文字列の領域を赤枠で囲う
 def draw_chararea(target_path, results):
     image = Image.open(target_path).convert('RGB')
     draw = ImageDraw.Draw(image)

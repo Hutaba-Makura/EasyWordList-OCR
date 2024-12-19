@@ -5,6 +5,7 @@ from PIL import Image
 
 # Description: 画像中の本のページを補正するプログラム
 
+# 画像の透視変換を行う
 def correct_warp(image_path):
     print("画像を読み込んでいます...")
     # 画像を読み込み
