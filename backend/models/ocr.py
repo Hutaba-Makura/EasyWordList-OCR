@@ -26,7 +26,7 @@ client = vision.ImageAnnotatorClient(credentials=credentials)
 
 # テキスト検出
 def detect_text(image_path):
-    output_path = 'image_without_exif.jpg'
+    output_path = r'.\ocr_data\image_without_exif.jpg'
     exif_data = remove_exif(image_path, output_path)
     with open(output_path, 'rb') as f:
         image = f.read()
@@ -39,7 +39,7 @@ def detect_text(image_path):
 
     # レスポンスを辞書形式に変換して保存
     response_dict = MessageToDict(response._pb, preserving_proto_field_name=True)
-    with open('OCR_response.json', 'w', encoding='utf-8') as f:
+    with open(r'.\ocr_data\OCR_response.json', 'w', encoding='utf-8') as f:
         json.dump(response_dict, f, ensure_ascii=False, indent=4)
 
     print("レスポンスをOCR_response.jsonに保存しました。")
