@@ -21,6 +21,6 @@ def draw_chararea(target_path, results):
 
 
 if __name__ == "__main__":
-    target_path = r".\samples\DSC_1936.JPG"
+    target_path = r"..\samples\DSC_1936.JPG"
     print("test1-1")
     analyze_picture(target_path)
