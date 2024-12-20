@@ -2,3 +2,7 @@
 env/
 # GUI\easywordlist直下のnode_modulesフォルダを無視
 GUI/easywordlist/node_modules/
+
+# backend直下の__pycache__フォルダを無視
+backend/__pycache__/
+backend/models/__pycache__/
