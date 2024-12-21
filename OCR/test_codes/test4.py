@@ -72,9 +72,6 @@ def detect_edges(image):
         print("直線を検出できませんでした。")
         return image
 
-
-
-    
 def reprint_filename():
     global image_path
     target_path = image_path
@@ -90,9 +87,10 @@ def reprint_filename():
     print(root + f"_paint_{i}" + ext)
     return root + f"_paint_{i}" + ext
 
+
 def main():
     global image_path
-    image_path = r".\samples\DSC_1930.JPG"
+    image_path = r"..\samples\DSC_1937.JPG"
     image = cv2.imread(image_path)
     #enhanced_img = contrast_enhance(image) # 却下
     img_bgr = color_extract(image)

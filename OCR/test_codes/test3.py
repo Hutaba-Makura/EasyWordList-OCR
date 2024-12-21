@@ -14,6 +14,7 @@ def correct_warp(image_path):
         print("エラー: 画像が見つかりません。パスを確認してください。")
         return None
     
+    # 指定範囲の色以外を黒にする
     img_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     h_min, h_max = 0 , 115
     s_min, s_max = 2 , 41
@@ -33,8 +34,7 @@ def correct_warp(image_path):
     img_bgr = cv2.cvtColor(img_open, cv2.COLOR_HSV2BGR)
 
     # 画像をいい感じの大きさで表示
-    # 取り込んだ画像の幅と高さを取得
-    height, width = image.shape[:2]
+    height, width = image.shape[:2] # 取り込んだ画像の幅と高さを取得
     while height > 1000 or width > 1000:
         height = height * 0.9
         width = width * 0.9
@@ -116,5 +116,5 @@ def correct_warp(image_path):
 
 # 使用例
 if __name__ == "__main__":
-    correct_warp(r".\samples\DSC_1935.JPG")
+    correct_warp(r"..\samples\DSC_1935.JPG")
     cv2.waitKey(0)
