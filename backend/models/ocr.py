@@ -131,6 +131,17 @@ def rotate_image_and_coords(image, coords_list, exif_data):
     
     return image, coords_list
 
+# 回転された座標を元にresponseを更新
+def update_response(response, coords_list):
+    # テキスト領域の座標を更新
+    for i, coords in enumerate(coords_list):
+        vertices = response.text_annotations[i + 1].bounding_poly.vertices
+        for j, point in enumerate(coords):
+            vertices[j].x = point[0]
+            vertices[j].y = point[1]
+
+    return response
+
 # バウンディングボックスを中心間の距離でクラスタリングしてマージ
 def cluster_bounding_boxes(coords_list, threshold):
     # 各バウンディングボックスの中心を計算
@@ -251,18 +262,32 @@ def is_inside(centroid, merged_boxes):
             return True
     return False
 
-# merged_boxesの内側にある文字列を結合して抽出
+# merged_boxesの各領域の内側にある文字列を結合して抽出,merged_boxesの座標と共にjson形式で保存
 def extract_text_inside(response, merged_boxes):
-    response, exif_data, image = detect_text(image_path)
+    # テキスト領域の座標を取得
     coords_list = extract_coords(response)
-    image, coords_list = rotate_image_and_coords(image, coords_list, exif_data) # 画像と座標を回転
-    text = ""
+    # 各バウンディングボックスの中心を計算
+    centroids = []
     for coords in coords_list:
-        centroid = [np.mean([point[0] for point in coords]), np.mean([point[1] for point in coords])]
-        if is_inside(centroid, merged_boxes):
-            for point in coords:
-                text += image[point[1], point[0]]
-    return text
+        x_coords = [point[0] for point in coords]
+        y_coords = [point[1] for point in coords]
+        centroid = [np.mean(x_coords), np.mean(y_coords)]
+        centroids.append(centroid)
+
+    # バウンディングボックスの中心が各merged_boxの内側にあるなら、各merged_boxごとにテキストを結合
+    merged_result = []
+    for box in merged_boxes:
+        text = ""
+        for i, centroid in enumerate(centroids):
+            if is_inside(centroid, [box]):
+                text += response.text_annotations[i + 1].description
+        merged_result.append({"text": text, "box": box})
+
+    # 保存
+    with open(r'..\data\ocr_data\mrge_res_with_txt.json', 'w', encoding='utf-8') as f:
+        json.dump(merged_result, f, ensure_ascii=False, indent=4)
+    print("mrge_res_with_txt.jsonを保存しました。")
+    return merged_result
 
 # API用のmain関数
 def ocr_document(image_path):
@@ -271,6 +296,7 @@ def ocr_document(image_path):
     # テキストのバウンディングボックスの座標群を取得
     coords_list = extract_coords(response)
     draw_bounding_box(coords_list, image, (0, 0, 255)) # 赤色で描画
+    response = update_response(response, coords_list) # 回転された座標を元にresponseを更新
     # 画像と座標を回転
     image, coords_list = rotate_image_and_coords(image, coords_list, exif_data)
 
@@ -287,7 +313,11 @@ def ocr_document(image_path):
     cv2.imwrite('text_area_corrected.jpg', image)
     print("text_area_corrected.jpgを保存しました。")
 
-    return coords_list, merged_boxes
+    # バウンディングボックスの内側にある文字列を結合して抽出、merged_boxesの座標と共にjson形式で保存
+    merged_result = extract_text_inside(response, merged_boxes)
+
+    #  text_data.jsonとOCR_response.jsonを返す
+    return merged_result, response
 
 
 def main():

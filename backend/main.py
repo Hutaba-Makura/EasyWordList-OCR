@@ -16,9 +16,9 @@ async def ocr(file: UploadFile = File(...)):
         temp_file_path = temp_file.name
 
     # OCR処理
-    coords_list, merged_boxes = ocr_document(temp_file_path)
+    merged_result, result = ocr_document(temp_file_path)
 
-    return {"coords_list": coords_list, "merged_boxes": merged_boxes}
+    return {"merged_result": merged_result, "result": result}
 
 # Wordlist
 # 単語一覧を取得する
