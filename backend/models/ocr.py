@@ -26,7 +26,7 @@ client = vision.ImageAnnotatorClient(credentials=credentials)
 
 # テキスト検出
 def detect_text(image_path):
-    output_path = r'.\ocr_data\image_without_exif.jpg'
+    output_path = r'..\data\ocr_data\image_without_exif.jpg'
     exif_data = remove_exif(image_path, output_path)
     with open(output_path, 'rb') as f:
         image = f.read()
@@ -39,7 +39,7 @@ def detect_text(image_path):
 
     # レスポンスを辞書形式に変換して保存
     response_dict = MessageToDict(response._pb, preserving_proto_field_name=True)
-    with open(r'.\ocr_data\OCR_response.json', 'w', encoding='utf-8') as f:
+    with open(r'..\data\ocr_data\OCR_response.json', 'w', encoding='utf-8') as f:
         json.dump(response_dict, f, ensure_ascii=False, indent=4)
 
     print("レスポンスをOCR_response.jsonに保存しました。")
@@ -131,18 +131,8 @@ def rotate_image_and_coords(image, coords_list, exif_data):
     
     return image, coords_list
 
-# バウンディングボックスを中心間の距離でクラスタリング
+# バウンディングボックスを中心間の距離でクラスタリングしてマージ
 def cluster_bounding_boxes(coords_list, threshold):
-    """
-    Clusters bounding boxes based on proximity thresholds.
-
-    Args:
-        coords_list (list): List of bounding box coordinate arrays.
-        threshold (float): Minimum distance threshold for clustering.
-
-    Returns:
-        list: List of clustered bounding boxes.
-    """
     # 各バウンディングボックスの中心を計算
     centroids = []
     for coords in coords_list:
@@ -174,21 +164,16 @@ def cluster_bounding_boxes(coords_list, threshold):
 
     return clustered_boxes
 
+# バウンディングボックス間の最短距離を計算
 def calculate_box_distance(box1, box2):
-    """
-    2つのバウンディングボックスの最短距離を計算します。
-
-    Returns:    
-        float: 2つのバウンディングボックスの最短距離。
-    """
-    # Extract all edges (line segments) of each box
+    # 4つの頂点から4つの辺を取得
     def get_edges(box):
         return [(box[i], box[(i + 1) % 4]) for i in range(4)]
 
     edges1 = get_edges(box1)
     edges2 = get_edges(box2)
     
-    # Compute the minimum distance between all edges
+    # 2つの辺の組み合わせで最短距離を計算
     min_distance = float('inf')
     for (p1, q1) in edges1:
         for (p2, q2) in edges2:
@@ -196,13 +181,8 @@ def calculate_box_distance(box1, box2):
             min_distance = min(min_distance, distance)
     return min_distance
 
+# 2つの線分の最短距離を計算
 def segment_distance(p1, q1, p2, q2):
-    """
-    2つの線分の最短距離を計算します。
-
-    Returns:
-        float: 2つの線分の最短距離。
-    """
     def point_to_segment_distance(p, a, b):
         # Project point p onto line segment a-b
         ab = np.array(b) - np.array(a)
@@ -221,16 +201,8 @@ def segment_distance(p1, q1, p2, q2):
     ]
     return min(distances)
 
+# バウンディングボックスが重複しているかどうかを確認
 def is_overlapping(box1, box2):
-    """
-    Check if two bounding boxes overlap.
-    
-    Args:
-        box1, box2: List of coordinates [[x1, y1], ..., [x4, y4]].
-
-    Returns:
-        bool: True if the boxes overlap, otherwise False.
-    """
     x1_min = min(p[0] for p in box1)
     x1_max = max(p[0] for p in box1)
     y1_min = min(p[1] for p in box1)
@@ -241,21 +213,11 @@ def is_overlapping(box1, box2):
     y2_min = min(p[1] for p in box2)
     y2_max = max(p[1] for p in box2)
 
-    # Check for overlap
+    # 重複を確認
     return not (x1_max < x2_min or x2_max < x1_min or y1_max < y2_min or y2_max < y1_min)
 
 # バウンディングボックスを重複と最短距離の両方を考慮してマージ
 def merge_boxes_with_overlap(boxes, threshold):
-    """
-    Merge bounding boxes considering both overlap and distance.
-
-    Args:
-        boxes (list): List of bounding boxes [[x1, y1], ..., [x4, y4]].
-        threshold (float): Distance threshold for merging.
-
-    Returns:
-        list: List of merged bounding boxes.
-    """
     merged = []
     while boxes:
         base_box = boxes.pop(0)
@@ -278,6 +240,29 @@ def merge_boxes_with_overlap(boxes, threshold):
                 i += 1
         merged.append(base_box)
     return merged
+
+# バウンディングボックスの中心座標がmerged_boxesの内側にあるならTrueを返す
+def is_inside(centroid, merged_boxes):
+    x, y = centroid
+    for box in merged_boxes:
+        x_min, y_min = box[0]
+        x_max, y_max = box[2]
+        if x_min < x < x_max and y_min < y < y_max:
+            return True
+    return False
+
+# merged_boxesの内側にある文字列を結合して抽出
+def extract_text_inside(response, merged_boxes):
+    response, exif_data, image = detect_text(image_path)
+    coords_list = extract_coords(response)
+    image, coords_list = rotate_image_and_coords(image, coords_list, exif_data) # 画像と座標を回転
+    text = ""
+    for coords in coords_list:
+        centroid = [np.mean([point[0] for point in coords]), np.mean([point[1] for point in coords])]
+        if is_inside(centroid, merged_boxes):
+            for point in coords:
+                text += image[point[1], point[0]]
+    return text
 
 # API用のmain関数
 def ocr_document(image_path):
@@ -306,7 +291,7 @@ def ocr_document(image_path):
 
 
 def main():
-    image_path = r".\samples\DSC_1936.JPG"
+    image_path = r"..\..\OCR\samples\DSC_1936.JPG"
 
     # メイン処理
     response, exif_data, image = detect_text(image_path)
@@ -321,7 +306,7 @@ def main():
     # 50ピクセルの長さの緑色の線を引く
     cv2.line(image, (0, 50), (50, 50), (0, 255, 0), 2)
     # 画像を保存
-    cv2.imwrite('text_area_corrected.jpg', image)
+    cv2.imwrite(r'..\data\ocr_data\text_area_corrected.jpg', image)
     print("text_area_corrected.jpgを保存しました。")
     
 if __name__ == '__main__':
