@@ -2,23 +2,24 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from models.ocr import ocr_document
 import models.wordlist as WL
 import tempfile
+from fastapi.responses import JSONResponse
 
 app = FastAPI()
 
 
 # OCR
 # ファイルをアップロードしてOCR処理を行う
-@app.post("/ocr/")
-async def ocr(file: UploadFile = File(...)):
-    # ファイルを一時保存して処理
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-        temp_file.write(await file.read())
-        temp_file_path = temp_file.name
-
-    # OCR処理
-    merged_result, result = ocr_document(temp_file_path)
-
-    return {"merged_result": merged_result, "result": result}
+@app.post("/ocr")
+async def ocr_endpoint(file: UploadFile):
+    try:
+        # ocr_documentを実行
+        result = ocr_document(file.file)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        return JSONResponse(
+            content={"status": "error", "message": str(e)},
+            status_code=500,
+        )
 
 # Wordlist
 # 単語一覧を取得する

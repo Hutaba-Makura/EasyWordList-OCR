@@ -26,7 +26,7 @@ client = vision.ImageAnnotatorClient(credentials=credentials)
 
 # テキスト検出
 def detect_text(image_path):
-    output_path = r'..\data\ocr_data\image_without_exif.jpg'
+    output_path = r'.\data\ocr_data\image_without_exif.jpg'
     exif_data = remove_exif(image_path, output_path)
     with open(output_path, 'rb') as f:
         image = f.read()
@@ -39,7 +39,7 @@ def detect_text(image_path):
 
     # レスポンスを辞書形式に変換して保存
     response_dict = MessageToDict(response._pb, preserving_proto_field_name=True)
-    with open(r'..\data\ocr_data\OCR_response.json', 'w', encoding='utf-8') as f:
+    with open(r'.\data\ocr_data\OCR_response.json', 'w', encoding='utf-8') as f:
         json.dump(response_dict, f, ensure_ascii=False, indent=4)
 
     print("レスポンスをOCR_response.jsonに保存しました。")
@@ -284,10 +284,14 @@ def extract_text_inside(response, merged_boxes):
         merged_result.append({"text": text, "box": box})
 
     # 保存
-    with open(r'..\data\ocr_data\mrge_res_with_txt.json', 'w', encoding='utf-8') as f:
+    with open(r'.\data\ocr_data\mrge_res_with_txt.json', 'w', encoding='utf-8') as f:
         json.dump(merged_result, f, ensure_ascii=False, indent=4)
     print("mrge_res_with_txt.jsonを保存しました。")
     return merged_result
+
+# google._upb._message.Descriptor 型のオブジェクトをjsonable_encoderが対応できるdict型に変換
+def message_to_dict(response):
+    return MessageToDict(response._pb, preserving_proto_field_name=True)
 
 # API用のmain関数
 def ocr_document(image_path):
@@ -316,6 +320,8 @@ def ocr_document(image_path):
     # バウンディングボックスの内側にある文字列を結合して抽出、merged_boxesの座標と共にjson形式で保存
     merged_result = extract_text_inside(response, merged_boxes)
 
+    response = message_to_dict(response)
+
     #  text_data.jsonとOCR_response.jsonを返す
     return merged_result, response
 
@@ -328,16 +334,25 @@ def main():
     coords_list = extract_coords(response)
     draw_bounding_box(coords_list, image, (0, 0, 255)) # 赤色で描画
     image, coords_list = rotate_image_and_coords(image, coords_list, exif_data) # 画像と座標を回転
+    response = update_response(response, coords_list) # 回転された座標を元にresponseを更新
+
     clustered_boxes = cluster_bounding_boxes(coords_list, threshold=80) # 早いけど精度が低い
     # clustered_boxes = merge_boxes_with_overlap(coords_list, threshold=10) # 遅いけど精度が高い
     #draw_bounding_box(clustered_boxes, image, (255, 0, 0)) # 青色で描画
+
     merged_boxes = merge_boxes_with_overlap(clustered_boxes, threshold=10)
+
     draw_bounding_box(merged_boxes, image, (255, 0, 0)) # 青色で描画
-    # 50ピクセルの長さの緑色の線を引く
-    cv2.line(image, (0, 50), (50, 50), (0, 255, 0), 2)
     # 画像を保存
-    cv2.imwrite(r'..\data\ocr_data\text_area_corrected.jpg', image)
+    cv2.imwrite(r'.\data\ocr_data\text_area_corrected.jpg', image)
     print("text_area_corrected.jpgを保存しました。")
+
+    # バウンディングボックスの内側にある文字列を結合して抽出、merged_boxesの座標と共にjson形式で保存
+    merged_result = extract_text_inside(response, merged_boxes)
+
+    # txtデータのみを出力
+    for mr in merged_result:
+        print(f"{mr['text']}", end=" | ")
     
 if __name__ == '__main__':
     main()
