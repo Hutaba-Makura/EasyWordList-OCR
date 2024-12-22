@@ -1,0 +1,37 @@
+### 省略 ###
+from google.protobuf.json_format import MessageToDict
+
+# 環境変数からAPIキーのパスを取得
+api_key_path = os.getenv('CloudVisionAPIKey')
+# 認証情報を読み込む
+credentials = service_account.Credentials.from_service_account_file(api_key_path)
+# クライアントのインスタンスを作成
+client = vision.ImageAnnotatorClient(credentials=credentials)
+
+# テキスト検出
+def detect_text(image_path):
+    with open(image_path, 'rb') as f:
+        image = f.read()
+
+    # Vision APIに渡す形式に変換
+    image = vision.Image(content=image)
+    # テキスト検出
+    response = client.text_detection(image=image, image_context={"language_hints": ["ja", "en"]})
+    # レスポンスを辞書形式に変換して保存
+    response_dict = MessageToDict(response._pb, preserving_proto_field_name=True)
+    with open('OCR_response.json', 'w', encoding='utf-8') as f:
+        json.dump(response_dict, f, ensure_ascii=False, indent=4)
+
+    print("レスポンスをOCR_response.jsonに保存しました。")
+    print(response.text_annotations[0].description)
+    return response
+
+# 結果をもとに各領域を赤枠で囲う
+def draw_text_area(image_path, response):
+    ### 省略 ###
+
+if __name__ == '__main__':
+    # テキスト検出
+    image_path = r"..\..\samples\DSC_1936.JPG"
+    result = detect_text(image_path)
+    draw_text_area(image_path, result)
